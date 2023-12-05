@@ -3,35 +3,22 @@ const dotenv = require('dotenv');
 const fs = require('fs');
 dotenv.config();
 
-function parseSwapEventData(data) {
-  return data.result.map((log) => {
-    const amount0In = log.data.slice(2,66);
-    const amount1In = log.data.slice(66,130);
-    const amount0Out = log.data.slice(130,194);
-    const amount1Out = log.data.slice(194,258);
-    return {
-      ...log,
-      data: {
-        amount0In: BigInt('0x' + amount0In).toString(),
-        amount1In: BigInt('0x' + amount1In).toString(),
-        amount0Out: BigInt('0x' + amount0Out).toString(),
-        amount1Out: BigInt('0x' + amount1Out).toString(),
-      }
-    };
-  });
-}
+// Node.js
+const { Client } = require('@bnb-chain/greenfield-js-sdk');
+// const { ACCOUNT_ADDRESS, ACCOUNT_PRIVATEKEY } = require('./env');
 
 async function main() {
-  const stakeEventHash = "0x9e71bc8eea02a63969f509818f2dafb9254532904319f9dbda79b67bd34a5f3d";
   const vaultDeployBlockNumber = 16654484;
   const spinStakableAddress = "0x06f2ba50843e2d26d8fd3184eaadad404b0f1a67";
   const spinStarterVaultAddress = "0x03447d28FC19cD3f3cB449AfFE6B3725b3BCdA77";
+  const spinTokenAddress = "0x6AA217312960A21aDbde1478DC8cBCf828110A67";
   const transferEventHash = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
   const bscMainnetProvider = new ethers.JsonRpcProvider(process.env.RPC_URL);
   const currentBlockNumber = await bscMainnetProvider.getBlockNumber();
+  const now = new Date();
 
   let lastFetchedBlockNumber = vaultDeployBlockNumber - 1;
-  const holders = new Set();
+  let holders = new Set();
   let lastTurnCounter = 0;
   while (true) {
     const params = new URLSearchParams();
@@ -69,19 +56,47 @@ async function main() {
   }
   console.log(holders);
   const balances = {};
+  const stakedSpinBalances = {};
+
+  // TODO: Remove this. Only for test.
+  // holders = Array.from(holders).slice(0, 20);
+
+  const erc20Abi = [
+    "function balanceOf(address owner) view returns (uint256)",
+    "function getUserStaked(address account) view returns (uint256)",
+    "function totalSupply() view returns (uint256)"
+  ];
+  const spinStarterVaultContract = new ethers.Contract(spinStarterVaultAddress, erc20Abi, bscMainnetProvider);
+  const totalSupply = await spinStarterVaultContract.totalSupply();
+
+  const spinTokenContract = new ethers.Contract(spinTokenAddress, erc20Abi, bscMainnetProvider);
+  const spinTokenTotalSupply = await spinTokenContract.totalSupply();
+
   for await (const holder of holders) {
-    const erc20Abi = [
-      "function balanceOf(address owner) view returns (uint256)",
-    ];
-    const erc20Contract = new ethers.Contract(spinStarterVaultAddress, erc20Abi, bscMainnetProvider);
-    const balance = await erc20Contract.balanceOf(holder);
+    const [balance, stakedBalance] = await Promise.all([
+      spinStarterVaultContract.balanceOf(holder),
+      spinStarterVaultContract.getUserStaked(holder),
+    ]);
     balances[holder] = balance.toString();
-    if (balance !== '0') {
-      console.log(holder, balance.toString());
-    }
+    stakedSpinBalances[holder] = stakedBalance.toString();
+    console.log(holder, balance.toString());
   }
-  console.log(holders);
-  // fs.writeFileSync('output.csv', csvData);
+
+  const totalSpinStaked = Object.values(stakedSpinBalances).reduce((acc, balance) => {
+    return acc + BigInt(balance.toString());
+  }, BigInt(0));
+
+  const fileJson = {
+    isoString: now.toISOString(),
+    fromBlock: vaultDeployBlockNumber,
+    toBlock: currentBlockNumber,
+    totalVaultShares: totalSupply.toString(),
+    vaultShares: balances,
+    spinTokenTotalSupply: spinTokenTotalSupply.toString(),
+    totalSpinStaked: totalSpinStaked.toString(),
+    stakedSpinBalances,
+  };
+  fs.writeFileSync(`snapshot-${now.toISOString()}.json`, JSON.stringify(fileJson));
 }
 
 main().then(() => {}).catch((err) => {
