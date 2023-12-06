@@ -3,8 +3,10 @@ module vault-snapshot
 go 1.21.4
 
 require (
+	github.com/bnb-chain/greenfield v1.1.0
 	github.com/bnb-chain/greenfield-go-sdk v1.1.1
 	github.com/ethereum/go-ethereum v1.10.26
+	github.com/joho/godotenv v1.5.1
 )
 
 require (
@@ -21,7 +23,6 @@ require (
 	github.com/armon/go-metrics v0.4.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bgentry/speakeasy v0.1.1-0.20220910012023-760eaf8b6816 // indirect
-	github.com/bnb-chain/greenfield v1.1.0 // indirect
 	github.com/bnb-chain/greenfield-common/go v0.0.0-20230906132736-eb2f0efea228 // indirect
 	github.com/btcsuite/btcd v0.23.3 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2 // indirect
@@ -79,7 +80,6 @@ require (
 	github.com/huandu/skiplist v1.2.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jmhodges/levigo v1.0.0 // indirect
-	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/klauspost/compress v1.16.3 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.4 // indirect
 	github.com/klauspost/reedsolomon v1.11.8 // indirect

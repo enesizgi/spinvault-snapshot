@@ -17,6 +17,7 @@ import (
 
 	"github.com/bnb-chain/greenfield-go-sdk/client"
 	"github.com/bnb-chain/greenfield-go-sdk/types"
+	storageTypes "github.com/bnb-chain/greenfield/x/storage/types"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -356,7 +357,9 @@ func main() {
 	}
 
 	// create and put object
-	txnHash, err := cli.CreateObject(ctx, bucketName, objectName, bytes.NewReader(buffer), types.CreateObjectOptions{})
+	txnHash, err := cli.CreateObject(ctx, bucketName, objectName, bytes.NewReader(buffer), types.CreateObjectOptions{
+		Visibility: storageTypes.VISIBILITY_TYPE_PUBLIC_READ,
+	})
 	if err != nil {
 		log.Fatalf("fail to create object %s", objectName)
 	}
