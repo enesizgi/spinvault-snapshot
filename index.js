@@ -1,11 +1,79 @@
 const { ethers } = require("ethers");
 const dotenv = require('dotenv');
+const mimeTypes = require('mime-types');
 const fs = require('fs');
+const path = require('path');
 dotenv.config();
 
 // Node.js
 const { Client } = require('@bnb-chain/greenfield-js-sdk');
-// const { ACCOUNT_ADDRESS, ACCOUNT_PRIVATEKEY } = require('./env');
+const client = Client.create(
+  'https://greenfield-chain.bnbchain.org/',
+  '1017'
+);
+const { getCheckSums } = require('@bnb-chain/greenfiled-file-handle');
+const ACCOUNT_ADDRESS = process.env.ACCOUNT_ADDRESS;
+const ACCOUNT_PRIVATEKEY = process.env.ACCOUNT_PRIVATEKEY;
+const bucketName = 'spin';
+
+async function createObject(fileName) {
+  const fileBuffer = fs.readFileSync(fileName);
+  const objectName = fileName.replace('./', '');
+  const extname = path.extname(fileName);
+  const fileType = mimeTypes.lookup(extname);
+  const hashResult = await getCheckSums(fileBuffer);
+  const { contentLength, expectCheckSums } = hashResult;
+
+  const createObjectTx = await client.object.createObject(
+    {
+      bucketName: bucketName,
+      objectName: objectName,
+      creator: ACCOUNT_ADDRESS,
+      // visibility: 'VISIBILITY_TYPE_PUBLIC_READ',
+      fileType: fileType,
+      // redundancyType: 'REDUNDANCY_EC_TYPE',
+      contentLength,
+      expectCheckSums: JSON.parse(expectCheckSums),
+    },
+    {
+      type: 'ECDSA',
+      privateKey: ACCOUNT_PRIVATEKEY,
+    },
+  );
+
+  const createObjectTxSimulateInfo = await createObjectTx.simulate({
+    denom: 'BNB',
+  });
+
+  return;
+  const createObjectTxRes = await createObjectTx.broadcast({
+    denom: 'BNB',
+    gasLimit: Number(createObjectTxSimulateInfo?.gasLimit),
+    gasPrice: createObjectTxSimulateInfo?.gasPrice || '5000000000',
+    payer: ACCOUNT_ADDRESS,
+    granter: '',
+    privateKey: ACCOUNT_PRIVATEKEY,
+  });
+
+  console.log('create object success', createObjectTxRes);
+
+  const uploadRes = await client.object.uploadObject(
+    {
+      bucketName: bucketName,
+      objectName: objectName,
+      body: fileBuffer,
+      txnHash: createObjectTxRes.transactionHash,
+    },
+    {
+      type: 'ECDSA',
+      privateKey: ACCOUNT_PRIVATEKEY,
+    },
+  );
+
+  if (uploadRes.code === 0) {
+    console.log('upload object success', uploadRes);
+  }
+}
 
 async function main() {
   const vaultDeployBlockNumber = 16654484;
@@ -54,7 +122,8 @@ async function main() {
     }
     console.log(lastFetchedBlockNumber);
   }
-  console.log(holders);
+  console.log(holders, holders.size);
+  return;
   const balances = {};
   const stakedSpinBalances = {};
 
@@ -96,10 +165,17 @@ async function main() {
     totalSpinStaked: totalSpinStaked.toString(),
     stakedSpinBalances,
   };
-  fs.writeFileSync(`snapshot-${now.toISOString()}.json`, JSON.stringify(fileJson));
+  const fileName = `./snapshot-${now.toISOString()}.json`;
+  fs.writeFileSync(fileName, JSON.stringify(fileJson));
+  // await createObject(fileName);
 }
 
 main().then(() => {}).catch((err) => {
   console.log(err);
   process.exitCode = 1
 })
+
+// createObject('./snapshot-2023-12-05T16:37:39.682Z.json').then(() => {}).catch((err) => {
+//   console.log(err);
+//   process.exitCode = 1
+// })
