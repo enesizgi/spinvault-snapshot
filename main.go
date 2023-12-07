@@ -372,6 +372,7 @@ func uploadToGreenfield() {
 }
 
 func main() {
+	fmt.Println("Starting snapshot app...")
 	for {
 		// get all files in current directory
 		files, err := ioutil.ReadDir(".")
