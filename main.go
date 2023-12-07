@@ -311,8 +311,7 @@ func sweepHolders() (filename string, err error) {
 	return fileName, nil
 }
 
-// it is the example of basic storage SDKs usage
-func main() {
+func uploadToGreenfield() {
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatalf("err loading: %v", err)
@@ -370,4 +369,34 @@ func main() {
 		log.Fatalf("fail to put object %s", objectName)
 	}
 	log.Printf("object: %s has been uploaded to SP\n", objectName)
+}
+
+func main() {
+	for {
+		// get all files in current directory
+		files, err := ioutil.ReadDir(".")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		// get latest snapshot date
+		var latestSnapshotDate time.Time
+		for _, file := range files {
+			if strings.HasPrefix(file.Name(), "snapshot-") && strings.HasSuffix(file.Name(), ".json") {
+				snapshotDate, err := time.Parse("snapshot-2006-01-02T15:04:05Z.json", file.Name())
+				if err != nil {
+					log.Fatal(err)
+				}
+				if snapshotDate.After(latestSnapshotDate) {
+					latestSnapshotDate = snapshotDate
+				}
+			}
+		}
+
+		// if latest snapshot date is older than 24 hours, run uploadToGreenfield()
+		if time.Since(latestSnapshotDate) > 24*time.Hour {
+			uploadToGreenfield()
+		}
+		time.Sleep(10 * time.Second)
+	}
 }
