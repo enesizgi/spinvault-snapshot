@@ -19,7 +19,6 @@ import (
 	"github.com/bnb-chain/greenfield-go-sdk/types"
 	storageTypes "github.com/bnb-chain/greenfield/x/storage/types"
 
-	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -283,6 +282,7 @@ func sweepHolders() (filename string, err error) {
 
 		balances[holder] = balance.String()
 		stakedSpinBalances[holder] = stakedBalance.String()
+		time.Sleep(50 * time.Millisecond)
 	}
 
 	totalSpinStaked := big.NewInt(0)
