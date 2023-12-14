@@ -7,6 +7,8 @@ import (
 	"log"
 	"strings"
 	"time"
+
+	"github.com/joho/godotenv"
 )
 
 const (
@@ -51,9 +53,15 @@ type Snapshot struct {
 }
 
 func main() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatalf("err loading: %v", err)
+	}
 	fmt.Println("Starting snapshot app...")
 
 	onlyUpload := flag.Bool("onlyUpload", false, "only upload last snapshot to greenfield without sweeping holders")
+	onlySnapshot := flag.Bool("onlySnapshot", false, "only snapshot without uploading to greenfield")
+	dev := flag.Bool("dev", false, "use dev environment")
 	flag.Parse()
 
 	for {
@@ -79,11 +87,21 @@ func main() {
 			}
 		}
 
-		if onlyUpload != nil && *onlyUpload {
+		if onlySnapshot != nil && *onlySnapshot && time.Since(latestSnapshotDate) > 24*time.Hour {
+			_, err = sweepHolders()
+			if err != nil {
+				fmt.Println("Error sweeping holders:", err)
+			}
+		} else if onlyUpload != nil && *onlyUpload {
 			uploadToGreenfield(true, latestSnapshotFileName)
 			return
 		} else if time.Since(latestSnapshotDate) > 24*time.Hour {
 			uploadToGreenfield(false, "")
+		} else if dev != nil && *dev {
+			_, err = sweepHolders()
+			if err != nil {
+				fmt.Println("Error sweeping holders:", err)
+			}
 		}
 		time.Sleep(10 * time.Second)
 	}

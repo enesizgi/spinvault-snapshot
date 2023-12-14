@@ -14,7 +14,6 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/joho/godotenv"
 
 	"io/ioutil"
 	"log"
@@ -191,7 +190,11 @@ func sweepHolders() (filename string, err error) {
 
 	balances := make(map[string]string)
 	stakedSpinBalances := make(map[string]string)
+	total_diff := 0 * time.Second
+	fmt.Println(total_diff)
+	total_cu := 0
 	for _, holder := range holderAddresses {
+		time1 := time.Now()
 		data, err = parsedABI.Pack("balanceOf", common.HexToAddress(holder))
 		if err != nil {
 			fmt.Println("Error packing balanceOf:", err)
@@ -237,7 +240,20 @@ func sweepHolders() (filename string, err error) {
 
 		balances[holder] = balance.String()
 		stakedSpinBalances[holder] = stakedBalance.String()
-		time.Sleep(200 * time.Millisecond)
+		fmt.Println(holder, balance, stakedBalance)
+		time2 := time.Now()
+		total_diff += time2.Sub(time1)
+		total_cu += 25
+		if total_cu >= 150 {
+			total_cu = 0
+			fmt.Println(total_diff, total_cu)
+			if total_diff < 1*time.Second {
+				time.Sleep(1*time.Second - total_diff)
+			} else {
+				time.Sleep(1 * time.Second)
+			}
+			total_diff = 0 * time.Second
+		}
 	}
 
 	totalSpinStaked := big.NewInt(0)
@@ -266,11 +282,8 @@ func sweepHolders() (filename string, err error) {
 }
 
 func uploadToGreenfield(isOnlyUpload bool, lastSnapshotFileName string) {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatalf("err loading: %v", err)
-	}
 	var objectName string
+	var err error
 	if isOnlyUpload {
 		fmt.Println("Uploading last snapshot file:", lastSnapshotFileName)
 		objectName = lastSnapshotFileName
@@ -323,6 +336,7 @@ func uploadToGreenfield(isOnlyUpload bool, lastSnapshotFileName string) {
 	if err != nil {
 		log.Fatalf("fail to create object %s", objectName)
 	}
+	time.Sleep(1 * time.Minute)
 	fmt.Println("txnHash:", txnHash)
 	err = cli.PutObject(ctx, bucketName, objectName, objectSize,
 		bytes.NewReader(buffer), types.PutObjectOptions{TxnHash: txnHash})
