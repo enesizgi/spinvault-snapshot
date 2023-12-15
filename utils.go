@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/bnb-chain/greenfield-go-sdk/client"
 	"github.com/bnb-chain/greenfield-go-sdk/types"
@@ -281,12 +283,12 @@ func sweepHolders() (filename string, err error) {
 	return fileName, nil
 }
 
-func uploadToGreenfield(isOnlyUpload bool, lastSnapshotFileName string) {
+func uploadToGreenfield(isOnlyUpload bool, snapshotFileName string) {
 	var objectName string
 	var err error
 	if isOnlyUpload {
-		fmt.Println("Uploading last snapshot file:", lastSnapshotFileName)
-		objectName = lastSnapshotFileName
+		fmt.Println("Uploading snapshot file:", snapshotFileName)
+		objectName = snapshotFileName
 	} else {
 		fmt.Println("Sweeping holders...")
 		objectName, err = sweepHolders()
@@ -336,7 +338,6 @@ func uploadToGreenfield(isOnlyUpload bool, lastSnapshotFileName string) {
 	if err != nil {
 		log.Fatalf("fail to create object %s", objectName)
 	}
-	time.Sleep(1 * time.Minute)
 	fmt.Println("txnHash:", txnHash)
 	err = cli.PutObject(ctx, bucketName, objectName, objectSize,
 		bytes.NewReader(buffer), types.PutObjectOptions{TxnHash: txnHash})
@@ -344,4 +345,80 @@ func uploadToGreenfield(isOnlyUpload bool, lastSnapshotFileName string) {
 		log.Fatalf("fail to put object %s", objectName)
 	}
 	log.Printf("object: %s has been uploaded to SP\n", objectName)
+
+	waitObjectSeal(cli, bucketName, objectName)
+	// wait for block_syncer to sync up data from chain
+	time.Sleep(time.Second * 5)
+}
+
+func handleErr(err error, funcName string) {
+	if err != nil {
+		log.Fatalln("fail to " + funcName + ": " + err.Error())
+	}
+}
+
+func waitObjectSeal(cli client.IClient, bucketName, objectName string) {
+	ctx := context.Background()
+	// wait for the object to be sealed
+	timeout := time.After(15 * time.Second)
+	ticker := time.NewTicker(2 * time.Second)
+
+	for {
+		select {
+		case <-timeout:
+			err := errors.New("object not sealed after 15 seconds")
+			handleErr(err, "HeadObject")
+		case <-ticker.C:
+			objectDetail, err := cli.HeadObject(ctx, bucketName, objectName)
+			handleErr(err, "HeadObject")
+			if objectDetail.ObjectInfo.GetObjectStatus().String() == "OBJECT_STATUS_SEALED" {
+				ticker.Stop()
+				fmt.Printf("put object %s successfully \n", objectName)
+				return
+			}
+		}
+	}
+}
+
+func uploadMissingAfterLastUploaded(localSnapshots []string) {
+	privateKey := os.Getenv("ACCOUNT_PRIVATEKEY")
+	account, err := types.NewAccountFromPrivateKey("bnb", privateKey)
+	if err != nil {
+		log.Fatalf("New account from private key error, %v", err)
+	}
+	cli, err := client.New(chainId, rpcAddr, client.Option{DefaultAccount: account})
+	if err != nil {
+		log.Fatalf("unable to new greenfield client, %v", err)
+	}
+	ctx := context.Background()
+
+	// head bucket
+	bucketInfo, err := cli.HeadBucket(ctx, bucketName)
+	//handleErr(err, "HeadBucket")
+	log.Println("bucket info:", bucketInfo.String())
+
+	// list objects
+	objects, err := cli.ListObjects(ctx, bucketName, types.ListObjectsOptions{
+		ShowRemovedObject: false, Delimiter: "", MaxKeys: 100,
+		Endpoint:  "https://greenfield-sp.ninicoin.io",
+		SPAddress: "0x2901FDdEF924f077Ec6811A4a6a1CB0F13858e8f",
+	})
+	log.Println("list objects result:")
+
+	var objectNames []string
+	for _, obj := range objects.Objects {
+		objectNames = append(objectNames, obj.ObjectInfo.ObjectName)
+		//i := obj.ObjectInfo.ObjectName
+		//log.Printf("object: %s, status: %s\n", i.ObjectName, i.ObjectStatus)
+	}
+
+	for _, localSnapshot := range localSnapshots {
+		// check if local snapshot is in objectNames
+		if slices.Contains(objectNames, localSnapshot) {
+			continue
+		}
+
+		fmt.Println("Uploading missing snapshot file:", localSnapshot)
+		uploadToGreenfield(true, localSnapshot)
+	}
 }

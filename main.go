@@ -61,6 +61,7 @@ func main() {
 
 	onlyUpload := flag.Bool("onlyUpload", false, "only upload last snapshot to greenfield without sweeping holders")
 	onlySnapshot := flag.Bool("onlySnapshot", false, "only snapshot without uploading to greenfield")
+	uploadMissing := flag.Bool("uploadMissing", false, "upload missing snapshots to greenfield")
 	dev := flag.Bool("dev", false, "use dev environment")
 	flag.Parse()
 
@@ -74,20 +75,25 @@ func main() {
 		// get latest snapshot date
 		var latestSnapshotDate time.Time
 		var latestSnapshotFileName string
+		var allSnapshots []string
 		for _, file := range files {
 			if strings.HasPrefix(file.Name(), "snapshot-") && strings.HasSuffix(file.Name(), ".json") {
-				latestSnapshotFileName = file.Name()
 				snapshotDate, err := time.Parse("snapshot-2006-01-02T15:04:05Z.json", file.Name())
 				if err != nil {
 					log.Fatal(err)
 				}
+				latestSnapshotFileName = file.Name()
+				allSnapshots = append(allSnapshots, file.Name())
 				if snapshotDate.After(latestSnapshotDate) {
 					latestSnapshotDate = snapshotDate
 				}
 			}
 		}
 
-		if onlySnapshot != nil && *onlySnapshot && time.Since(latestSnapshotDate) > 24*time.Hour {
+		if uploadMissing != nil && *uploadMissing {
+			uploadMissingAfterLastUploaded(allSnapshots)
+			return
+		} else if onlySnapshot != nil && *onlySnapshot && time.Since(latestSnapshotDate) > 24*time.Hour {
 			_, err = sweepHolders()
 			if err != nil {
 				fmt.Println("Error sweeping holders:", err)
